@@ -28,7 +28,7 @@ for linklda:
 
 java -Xmx2g -ea -Djava.awt.headless=true -Dfile.encoding=UTF-8 -server -classpath ./build:./lib/trove-2.1.0.jar:./context-lda.jar:./lib/JavaPlot.jar edu.psu.Experiments.CitationPrediction ../dataset/citeseer_umd/doc_sentenses_abstract . 3 200 3 0 5 10
 
-for Qi He Method (Context-aware Citation Recommendation, www 2010, Qi He et al.):
+for Qi He Method (Context-aware Citation Recommendation, www 2010, Qi He, et al.):
 
 java -Xmx2g -ea -Djava.awt.headless=true -Dfile.encoding=UTF-8 -server -classpath ./build:./lib/trove-2.1.0.jar:./context-lda.jar:./lib/JavaPlot.jar edu.psu.Experiments.relevantCitation ../dataset/citeseer_umd/doc_sentenses_abstract . 3 200 3 1 5 10
 
