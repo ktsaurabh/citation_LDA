@@ -1,0 +1,338 @@
+package edu.psu.relevance;
+
+import java.io.*;
+import java.util.*;
+import edu.psu.types.*;
+import gnu.trove.*;
+import edu.psu.io.*;
+
+public class NmfUpdate {
+	public int num_clusters;
+	public int seed;
+	public String outputDir;
+
+	public NmfUpdate(int num_clusters, int seed, String outDir) {
+		this.num_clusters = num_clusters;
+		this.seed = seed;
+		this.outputDir = outDir;
+
+		if (!new File(this.outputDir).exists()) {
+			boolean success = (new File(this.outputDir)).mkdir();
+			if (!success) {
+				System.out
+						.println("Output Directory creation Failed!.. Exiting");
+				System.exit(0);
+			}
+		}
+	}
+
+	public double[] normalize_l(double[] vect, int p) {
+		double[] norm_vect = new double[vect.length];
+		double norm = 0.0;
+		for (int i = 0; i < vect.length; i++) {
+			norm += Math.pow(vect[i], p);
+		}
+		norm = Math.pow(norm, 1.0 / (double) p);
+		for (int i = 0; i < vect.length; i++) {
+			norm_vect[i] = vect[i] / norm;
+		}
+		return norm_vect;
+
+	}
+
+	void covariance_matrix(Corpus corpus) {
+		double[][] matrix = new double[corpus.docs.size()][corpus.vocabulary
+				.size()];
+		double[] X = new double[corpus.vocabulary.size()];
+		for (int i = 0; i < corpus.docs.size(); i++) {
+			TIntDoubleHashMap doc = corpus.docs.get(i).normed_tfVector;
+			int[] keys = doc.keys();
+			for (int j = 0; j < keys.length; j++) {
+				X[keys[j]] += (doc.get(keys[j]) / corpus.docs.size());
+
+			}
+		}
+		for (int i = 0; i < corpus.docs.size(); i++) {
+			for (int j = 0; j < corpus.vocabulary.size(); j++) {
+				matrix[i][j] = (corpus.docs.get(i).normed_tfVector.get(j) - X[j]) * 100000;
+			}
+		}
+		BufferedWriter out_cluster_docs = null;
+		try {
+			out_cluster_docs = new BufferedWriter(new FileWriter(
+					"./covariance_mat"));
+			for (int i = 0; i < corpus.docs.size(); i++) {
+				for (int j = 0; j < corpus.vocabulary.size(); j++) {
+					out_cluster_docs.write(matrix[i][j] + "\t");
+				}
+				out_cluster_docs.write("\n");
+			}
+
+			out_cluster_docs.close();
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.exit(0);
+		}
+
+	}
+
+	void read_eign(String f, Corpus corpus) {
+		corpus.normalizedEignVector = new double[3][corpus.vocabulary.size()];
+		try {
+			String line = "";
+			BufferedReader br = null;
+			br = new BufferedReader(new FileReader(f));
+			int i = 0;
+			while ((line = br.readLine()) != null) {
+				String[] vals = line.split(",");
+				corpus.normalizedEignVector[0][i] = Double.parseDouble(vals[0]);
+				corpus.normalizedEignVector[1][i] = Double.parseDouble(vals[1]);
+				corpus.normalizedEignVector[2][i] = Double.parseDouble(vals[2]);
+				i++;
+			}
+
+		} catch (java.io.IOException e) {
+			throw new IllegalArgumentException("IOException " + e);
+		}
+
+	}
+
+	void calculate(Corpus corpus) {
+		corpus.cluster = new double[this.num_clusters][corpus.vocabulary.size()];
+		corpus.cluster_doc = new int[corpus.docs.size()];
+		double[][] X = new double[this.num_clusters][corpus.vocabulary.size()];
+		double[][] dot_p = new double[this.num_clusters][corpus.docs.size()];
+		int[] cluster_size = new int[num_clusters];
+		Random rand = new Random(this.seed);
+		/*
+		 * for (int j = 0; j < this.num_clusters; j++) { for (int i = 0; i <
+		 * corpus.vocabulary.size(); i++) { corpus.cluster[j][i] = 1; }
+		 * corpus.cluster[j] = normalize_l(corpus.cluster[j], 2); }
+		 */
+		for (int j = 0; j < corpus.docs.size(); j++) {
+			corpus.cluster_doc[j] = rand.nextInt(num_clusters);
+			cluster_size[corpus.cluster_doc[j]]++;
+		}
+		// randomly assign documents to cluster
+
+		/*
+		 * double[][] WW = new
+		 * double[corpus.vocabulary.size()][corpus.vocabulary .size()]; for (int
+		 * i = 0; i < corpus.vocabulary.size(); i++) { TIntDoubleHashMap word =
+		 * corpus.words.get(i).occurrences; for (int j = 0; j <
+		 * corpus.vocabulary.size(); j++) { int[] keys = word.keys(); for (int k
+		 * = 0; k < keys.length; k++) { WW[i][j] += word.get(keys[k])
+		 * corpus.words.get(j).occurrences.get(keys[k]); } }
+		 * 
+		 * }
+		 */
+		int outer = 0;
+		while (outer++ < 10) {
+			for (int i = 0; i < corpus.docs.size(); i++) {
+				TIntDoubleHashMap doc = corpus.docs.get(i).normed_tfVector;
+				int[] keys = doc.keys();
+				for (int j = 0; j < keys.length; j++) {
+					X[corpus.cluster_doc[i]][keys[j]] += (doc.get(keys[j]) / cluster_size[corpus.cluster_doc[i]]);
+				}
+			}
+			if (outer == 1) {
+				for (int j = 0; j < this.num_clusters; j++) {
+					for (int i = 0; i < corpus.vocabulary.size(); i++) {
+						corpus.cluster[j][i] = X[j][i];
+					}
+					corpus.cluster[j] = normalize_l(corpus.cluster[j], 2);
+				}
+			}
+			int iter = 0;
+			while (iter++ < 20) {
+				System.out.println("Iter=" + iter);
+				// for each iterations
+
+				for (int clus = 0; clus < this.num_clusters; clus++) {
+					Arrays.fill(dot_p[clus], 0);
+					for (int i = 0; i < corpus.docs.size(); i++) {
+						TIntDoubleHashMap doc = corpus.docs.get(i).normed_tfVector;
+						int[] keys = doc.keys();
+						for (int j = 0; j < keys.length; j++) {
+							dot_p[clus][i] += doc.get(keys[j])
+									* corpus.cluster[clus][keys[j]];
+						}
+					}
+				}
+				double[] XC = new double[num_clusters];
+				// calculate Xc
+
+				// calculate WC
+				/*
+				 * double[] WC = new double[corpus.docs.size()]; double WCs = 0;
+				 * int count = 0; for (Document doc : corpus.docs) { int[] keys
+				 * = doc.normed_tfVector.keys(); for (int i = 0; i <
+				 * keys.length; i++) { WC[count] +=
+				 * doc.normed_tfVector.get(keys[i]) * corpus.cluster[keys[i]]; }
+				 * WCs += WC[count]; count++; } double[] Wy = new
+				 * double[corpus.vocabulary.size()]; double[] Wsy = new
+				 * double[corpus.vocabulary.size()]; for (int i = 0; i <
+				 * corpus.vocabulary.size(); i++) { TIntDoubleHashMap word =
+				 * corpus.words.get(i).occurrences; int[] keys = word.keys();
+				 * for (int k = 0; k < keys.length; k++) { Wy[i] +=
+				 * corpus.docs.get(keys[k]).normed_tfVector.get(i) WC[keys[k]];
+				 * Wsy[i] += corpus.docs.get(keys[k]).normed_tfVector.get(i) WCs
+				 * / corpus.docs.size(); } }
+				 */
+				for (int clus = 0; clus < num_clusters; clus++) {
+					for (int j = 0; j < corpus.vocabulary.size(); j++) {
+						XC[clus] += X[clus][j] * corpus.cluster[clus][j];
+
+					}
+				}
+
+				// calculate WXc
+				/*
+				 * double[] WXC = new double[corpus.vocabulary.size()]; for (int
+				 * i = 0; i < corpus.vocabulary.size(); i++) { for (int j = 0; j
+				 * < corpus.vocabulary.size(); j++) { WXC[i] += X[i] * X[j] *
+				 * corpus.docs.size() corpus.cluster[j]; } } double[] WWC = new
+				 * double[corpus.vocabulary.size()]; for (int i = 0; i <
+				 * corpus.vocabulary.size(); i++) {
+				 * 
+				 * for (int j = 0; j < corpus.vocabulary.size(); j++) {
+				 * 
+				 * WWC[i] += WW[i][j] * corpus.cluster[j];
+				 * 
+				 * }
+				 * 
+				 * }
+				 */
+				int count = 0;
+				for (int clus = 0; clus < num_clusters; clus++) {
+					for (int i = 0; i < corpus.vocabulary.size(); i++) {
+						double temp_doc = 0;
+						for (int j = 0; j < corpus.docs.size(); j++) {
+							temp_doc += (corpus.docs.get(j).normed_tfVector
+									.get(i) - X[corpus.cluster_doc[j]][i])// how
+									// much
+									// each
+									// coordinate
+									// is
+									// far
+									* (dot_p[clus][j] - XC[clus]);// dot_p[j] -
+																	// XC =
+																	// distance
+																	// of
+																	// doc
+							// from mean
+						}
+						// if(iter==10)
+						// System.out.println("term="+corpus.vocabulary.lookupObject(i).toString()+":temp_doc"
+						// + temp_doc);
+						// temp_vocab = 1-((1.0/ 500.0) * temp_doc);//Wy[i]=
+						// large
+						// for
+						// more frequent terms
+						// Wsy[i]= large for more frequent terms
+						// corpus.cluster[i] *= temp_vocab;
+						corpus.cluster[clus][i] = corpus.cluster[clus][i]
+								- ((1.0 / 50000.0) * temp_doc);
+
+						if (corpus.cluster[clus][i] < 0) {
+							corpus.cluster[clus][i] = 0.000000000001;
+							count++;
+						}
+					}
+					if (count < 0)
+						System.out.println("Count=" + count);
+					corpus.cluster[clus] = normalize_l(corpus.cluster[clus], 2);
+				}
+
+				// System.out.println("XC=" + XC);
+				// System.out.println("Count=" + count);
+
+			}
+
+			// get maximum relevance and assign documents
+			cluster_size = new int[num_clusters];
+			for (int j = 0; j < corpus.docs.size(); j++) {
+				double[] relevance = new double[num_clusters];
+				double max = -1;
+				for (int clus = 0; clus < num_clusters; clus++) {
+					TIntDoubleHashMap doc = corpus.docs.get(j).normed_tfVector;
+					int[] keys = doc.keys();
+					for (int k = 0; k < keys.length; k++) {
+						relevance[clus] += doc.get(keys[k])
+								* corpus.cluster[clus][keys[k]];
+					}
+					if (relevance[clus] > max) {
+
+						corpus.cluster_doc[j] = clus;
+						max = relevance[clus];
+					}
+
+				}
+				cluster_size[corpus.cluster_doc[j]]++;
+			}
+		}
+
+	}
+
+	public static void main(String[] args) {
+		/*
+		 * CommandOption .setSummary( ReadSvmFormat.class,
+		 * "A tool for creating instance objects of corpus collection from SVM format: currently without label information (for clustering only)"
+		 * ); CommandOption.process(ReadSvmFormat.class, args); if (args.length
+		 * == 0) { CommandOption.getList(ReadSvmFormat.class).printUsage(false);
+		 * System.exit(-1); } if (inputFile == null) { System.err
+		 * .println("You must include `--input FILE ...' in order to specify a"
+		 * + "file containing the instances, one per line."); System.exit(-1);
+		 * 
+		 * }
+		 */
+		if (args.length == 0) {
+			System.out.println("USAGE: ReadCSV inputfile output_model_file");
+		}
+		String input = args[0].toString();
+		String output = args[1].toString();
+		int num_clusters = Integer.parseInt(args[2]);
+		int iterations = Integer.parseInt(args[3]);
+		int seed = Integer.parseInt(args[4]);
+		// String eig = args[5].toString();
+
+		Corpus corpus = new Corpus();
+		corpus.addDocuments(ReadCSV.readSequence(input));
+		System.out.println(corpus.vocabulary.size());
+		corpus.normalizeCorpus();
+		System.out.println("Preparing word-doc correspondence");
+		// for(int i=0;i<corpus.vocabulary.size();i++){
+		// corpus.words.add(new WordOccurrences(i,corpus));
+		// }
+		corpus.prepareWordOccurrences();
+		System.out.println("Data Read");
+		// corpus.setMean();
+		// System.out.println("Mean Set");
+		NmfUpdate eigSys = new NmfUpdate(2, seed, output);
+		System.out.println("Calculating cluster");
+		eigSys.calculate(corpus);
+
+		BufferedWriter out_cluster_docs = null;
+		try {
+			out_cluster_docs = new BufferedWriter(new FileWriter(
+					eigSys.outputDir + "/" + input.split("/")[1] + "." + seed));
+			corpus.printClustersNMF(out_cluster_docs, num_clusters);
+			out_cluster_docs.write("--------Top Words------\n\n");
+			for (int clus = 0; clus < num_clusters; clus++) {
+				out_cluster_docs.write("Cluster-" + clus + " \n");
+				corpus.printFrequentWords(out_cluster_docs,
+						corpus.cluster[clus], corpus.cluster[clus].length);
+				out_cluster_docs.write("\n-------------------------------- \n");
+			}
+			out_cluster_docs.close();
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.exit(0);
+		}
+
+		// eigSys.covariance_matrix(corpus);
+	}
+
+}

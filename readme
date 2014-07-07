@@ -1,0 +1,43 @@
+For citation prediction experiments:
+
+java -Xmx2g -classpath ./build:./lib/trove-2.1.0.jar:./context-lda.jar:./lib/JavaPlot.jar edu.psu.Experiments.CitationPrediction <path to dir containing formatted text documents> <path to output file> <Window length around the citation mention> <number of topics> <number of iterations> <model type> <number of folds for crossvalidation> <K for p@K>
+
+Parameter explanations:
+path to dir containing formatted text documents: Directory should have text file for each document in which each line is a sentense and if there is a citation mention, then the line should have document id of the cited document in a comma seperated list at the end of line. E.g., here is how a line looks like: this is a sample line:10.1.1.123.2345:10.1.1.24.2313
+
+path to output file: a path where a file will be created with all the averages written
+
+Window length around the citation mention: number of sentenses to be considered before and after the sentense that has the mention
+
+number of topics: 
+
+number of iterations: Gibbs sampling iterations
+
+model type: an integer between 0 and 3  where values stands for as:0-linklda, 1-citelda, 2-linkplsalda, 3-citeplsalda
+
+number of folds for crossvalidation:
+
+K for p@K:
+
+A default command on my laptop looks like: 
+for citelda:
+
+java -Xmx2g -ea -Djava.awt.headless=true -Dfile.encoding=UTF-8 -server -classpath ./build:./lib/trove-2.1.0.jar:./context-lda.jar:./lib/JavaPlot.jar edu.psu.Experiments.CitationPrediction ../dataset/citeseer_umd/doc_sentenses_abstract . 3 200 3 1 5 10
+
+for linklda:
+
+java -Xmx2g -ea -Djava.awt.headless=true -Dfile.encoding=UTF-8 -server -classpath ./build:./lib/trove-2.1.0.jar:./context-lda.jar:./lib/JavaPlot.jar edu.psu.Experiments.CitationPrediction ../dataset/citeseer_umd/doc_sentenses_abstract . 3 200 3 0 5 10
+
+for Qi He Method (Context-aware Citation Recommendation, www 2010, Qi He et al.):
+
+java -Xmx2g -ea -Djava.awt.headless=true -Dfile.encoding=UTF-8 -server -classpath ./build:./lib/trove-2.1.0.jar:./context-lda.jar:./lib/JavaPlot.jar edu.psu.Experiments.relevantCitation ../dataset/citeseer_umd/doc_sentenses_abstract . 3 200 3 1 5 10
+
+for NMF on words and citation matrix:
+
+java -Xmx2g -ea -Djava.awt.headless=true -Dfile.encoding=UTF-8 -server -classpath ./build:./lib/trove-2.1.0.jar:./context-lda.jar:./lib/JavaPlot.jar edu.psu.factorization.NMF ../dataset/citeseer_umd/doc_sentenses_abstract . 3 200 3 1 5 10
+
+
+
+For perplexity experiments:
+
+java -Xmx2g -classpath ./build:./lib/trove-2.1.0.jar:./context-lda.jar:./lib/JavaPlot.jar edu.psu.Experiments.Perplexity <path to dir containing formatted text documents> <path to output file> <Window length around the citation mention> <number of topics> <number of iterations> <model type> <number of folds for crossvalidation>
